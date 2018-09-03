@@ -18,11 +18,13 @@
 """
 IMAP Library - a IMAP email testing library.
 """
-
+import socks
+from socket import socket
 from email import message_from_string
 from imaplib import IMAP4, IMAP4_SSL
 from re import findall
 from time import sleep, time
+
 try:
     from urllib.request import urlopen
 except ImportError:
@@ -71,6 +73,9 @@ class ImapLibrary(object):
     FOLDER = 'INBOX'
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
     ROBOT_LIBRARY_VERSION = __version__
+    PROXY_TYPES = {'http': 'socks.PROXY_TYPE_HTTP',
+                   'SOCKS4': 'socks.PROXY_TYPE_SOCKS4',
+                   'SCOKS5': 'socks.PROXY_TYPE_SOCKS5'}
 
     def __init__(self):
         """ImapLibrary can be imported without argument.
@@ -131,7 +136,7 @@ class ImapLibrary(object):
         else:
             body = self._imap.uid('fetch',
                                   email_index,
-                                  '(BODY[TEXT])')[1][0][1].\
+                                  '(BODY[TEXT])')[1][0][1]. \
                 decode('quoted-printable')
         return body
 
@@ -272,18 +277,43 @@ class ImapLibrary(object):
         - ``password``: The plaintext password to be use to authenticate mailbox on given ``host``.
         - ``port``: The IMAP port number. (Default None)
         - ``user``: The username to be use to authenticate mailbox on given ``host``.
-        - ``folder``: The email folder to read from. (Default INBOX)
+        - ``proxy_type``:
+        - ``proxy_host``: The IP address or Host name of the proxy server (Default localhost)
+        - ``proxy_port``: The port of the proxy server. (Defaults to 1080 for socks and 8080 for http)
+        - ``rdns``: This is a boolean flag than modifies the behavior regarding DNS resolving.
+                    If it is set to True, DNS resolving will be preformed remotely, on the server. (Default TRUE)
+        - ``proxy_user``: username for authentication with the server. (Default None)
+        - ``proxy_pwd``: password for authentication with the server. (Default None)
 
         Examples:
         | Open Mailbox | host=HOST | user=USER | password=SECRET |
         | Open Mailbox | host=HOST | user=USER | password=SECRET | is_secure=False |
         | Open Mailbox | host=HOST | user=USER | password=SECRET | port=8000 |
         | Open Mailbox | host=HOST | user=USER | password=SECRET | folder=Drafts
+        | Open Mailbox | host=HOST | user=USER | password=SECRET | proxy_type=SOCKS5 | proxy_host=HOST |
+           proxy_port=8080 | rdns=False | proxy_user=USER | proxy_pwd=SECRET |
         """
+
+
         host = kwargs.pop('host', kwargs.pop('server', None))
         is_secure = kwargs.pop('is_secure', 'True') == 'True'
         port = int(kwargs.pop('port', self.PORT_SECURE if is_secure else self.PORT))
         folder = '"%s"' % str(kwargs.pop('folder', self.FOLDER))
+        proxy_type = self.PROXY_TYPES.pop(kwargs.pop('proxy_type', None), None)
+        default_proxy = 8080
+        if '_SOCKS' in proxy_type:
+            default_proxy = 1080
+        proxy_host = kwargs.pop('proxy_host', 'localhost')
+        proxy_port = int(kwargs.pop('proxy_port', default_proxy))
+        rdns = kwargs.pop('rdns', True)
+        proxy_user = kwargs.pop('proxy_user', None)
+        proxy_pwd = kwargs.pop('proxy_pwd', None)
+
+        # set default proxy and patch the socket module
+        if proxy_type is not None:
+            socks.setdefaultproxy(proxy_type, proxy_host, proxy_port, rdns, proxy_user, proxy_pwd)
+            socket.socket = socks.socksocket
+
         self._imap = IMAP4_SSL(host, port) if is_secure else IMAP4(host, port)
         self._imap.login(kwargs.pop('user', None), kwargs.pop('password', None))
         self._imap.select(folder)

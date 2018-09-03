@@ -55,5 +55,5 @@ setup(
     platforms='any',
     packages=find_packages('src'),
     package_dir={'': 'src'},
-    install_requires=['future', 'robotframework >= 2.6.0']
+    install_requires=['future', 'robotframework >= 2.6.0', 'PySocks >= 1.6.8']
 )
